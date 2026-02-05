@@ -1,1 +1,0 @@
-{"machine": {"core":"RP2040","frequency": 120000000,"debug": false, "configureFrom":"sdcard"}, "sdcard": false, "ble": {"logging":true,"enabled": true, "name": "UVision", "pin": "1234"}, "sensevity": {"movement": true, "outside": 45, "inside": 75, "door": true, "core": 35}, "buzzer": true}
