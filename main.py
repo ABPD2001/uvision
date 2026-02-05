@@ -47,8 +47,9 @@ sdcardSPI = SPI(1,sck=Pin(10),mosi=Pin(11),miso=Pin(12))
 bleUART = UART(1,tx=Pin(8),rx=Pin(9), baudrate=9600)
 ntcADC = ADC(2)
 
-mcpClock = Pin(0,OUT)
-mcpData = Pin(1,OUT)
+# mcpClock = Pin(0,OUT)
+# mcpData = Pin(1,OUT)
+mcpUart = UART(0,tx=Pin(0),rx=None,baudrate=400)
 ds18b20OW = OneWire(Pin(5))
 microwave = Pin(6,IN,PULLDOWN)
 buzzerPWM = PWM(Pin(16))
@@ -106,23 +107,28 @@ executables = []
 # Icon controllers
 icon_controllers = []
 
-def mcp_write(value:str):
-    global mcpClock
-    global mcpData
+def mcp_write(x:int,y:int):
+    global mcpUart
     
-    if len(value) != 16: return
-    for n in range(0,16):
-        mcpClock.off()
-        mcpData.value(int(value[n]))
-        sleep_us(100)
-        mcpClock.on()
-        sleep_ms(5)
-        stat.toggle()
+    mcpUart.write(x.to_bytes(1,"big")+y.to_bytes(1,"big"))
+    
+#     global mcpClock
+#     global mcpData
+#     
+#     if len(value) != 16: return
+#     for n in range(0,16):
+#         mcpClock.off()
+#         mcpData.value(int(value[n]))
+#         sleep_us(100)
+#         mcpClock.on()
+#         sleep_ms(5)
+#         stat.toggle()
         
 
-def to_binary(num:int):
-    binary = bin(num)
-    return binary.replace("0b","")
+# def to_binary(num:int):
+#     binary = bin(num)
+#     strBin = binary.replace("0b","")
+#     return strBin+(8-len(strBin))*"0"
 
 def _setPage_(value,params):
     global page_idx
@@ -163,11 +169,11 @@ def run_file(path:str):
             if seconds_thread_stop:
                 n-=1
                 continue
-            print(l)
             [x,y,t] = l.split(",")
-            mcp_write(to_binary(int(y))+to_binary(int(x)))
+            print(int(x),int(y))
+            mcp_write(int(x),int(y))
             sleep_ms(int(t))
-        mcp_write("0"*8+"1"*8)
+        mcp_write(0,255)
     
 def two_digit(txt): return "0"+str(txt) if len(str(txt)) == 1 else str(txt) 
 
@@ -185,7 +191,6 @@ def check_sensevity():
     inside = ntc.getTemperature()
     moving = microwave.value()
     opened = ugn3503.value()
-    print(inside > config["sensevity"]["inside"],inside,config["sensevity"]["inside"])
     conds = {"outside": outside > config["sensevity"]["outside"] ,"inside":inside > config["sensevity"]["inside"] ,"core":get_core_temperature() > config["sensevity"]["core"] ,"door":opened and config["sensevity"]["door"],"movement":moving and config["sensevity"]["movement"]}
     
     return {"conds":conds,"total":conds["outside"] or conds["inside"] or conds["core"] or conds["door"] or conds["movement"]}
@@ -304,7 +309,7 @@ def _power_callback(option):
             n["callback"]()
             break
         
-power_menu = [0,220,240,60,_power_callback,[{"color":WHITE,"text":"Back"},{"color":WHITE,"text":"sleep"},{"color":RED,"text":"shutdown"},{"color":RED,"text":"reset"}]]
+power_menu = [0,220,240,60,_power_callback,[{"color":WHITE,"text":"Back"},{"color":WHITE,"text":"sleep"},{"color":WHITE,"text":"shutdown"},{"color":WHITE,"text":"reset"}]]
 
 def _ble_page(self,non):
     display = self.display
@@ -368,7 +373,7 @@ def _page_start_ok_action(pin):
         
         if do_once("resume",1):
             tft.fill(0)
-            mcp_write("1"*8+"0"*8)
+            mcp_write(255,0)
             tft.text(f32x16,"Running",64,120,color565(195,195,195))
         tft.text(f8x8,"> press ok to pause <",32,260,color565(195,195,195))
         
@@ -382,7 +387,7 @@ def _page_start_ok_action(pin):
                 outside = readDS18B20(ds18b20)
                 inside = ntc.getTemperature()
                 
-                mcp_write("1"*8+"0"*8)
+                mcp_write(255,0)
                 saved_status_diff = ticks_ms()-start
                 start = 9999999999999999
                 stopped = True
@@ -428,18 +433,18 @@ def _page_start_ok_action(pin):
                     saved_status_diff = 0
                     tft.fill_rect(0,100,240,50,0)
                     tft.text(f32x16,"Running",64,120,color565(195,195,195))
-                    display.text(f8x8,"> press ok to pause <",32,260,color565(195,195,195))
+                    tft.text(f8x8,"> press ok to pause <",32,260,color565(195,195,195))
                     buzzer.run_file("/sounds/done.uvw")
-                    mcp_write("1"*8+"0"*8)
+                    mcp_write(255,0)
                     
                 elif do_once("stop",1):
-                    mcp_write("1"*8+"0"*8)
+                    mcp_write(255,0)
                     saved_status_diff = ticks_ms()-start
                     start = 9999999999999999
                     stopped = True
                     tft.fill_rect(0,100,240,50,0)
                     tft.text(f32x16,"Paused",72,120,color565(195,195,195))
-                    display.text(f8x8,"> press ok to resume <",32,260,color565(195,195,195))
+                    tft.text(f8x8,"> press ok to resume <",32,260,color565(195,195,195))
                     buzzer.run_file("/sounds/done.uvw")
                     
             sleep_ms(250)
@@ -453,7 +458,7 @@ def _page_start_ok_action(pin):
                 sleep_ms(500)
                 break
             buzzer.run_file("/sounds/alarm.uvw")
-        mcp_write("0"*8+"1"*8)
+        mcp_write(0,255)
         menu.deinit()
         menu.erase()
         gui.display.fill(0)
@@ -539,7 +544,7 @@ def _page_storage(self,non):
             display.text(f32x16,cur_item["name"],floor((240-len(cur_item["name"])*16)/2),30,0,WHITE)
             display.text(f8x8,cur_item["date"],floor((240-len(cur_item["date"])*8)/2),75,color565(255,255,0))
             display.text(f8x8,cur_item["description"],floor((240-len(cur_item["description"])*8)/2),110,WHITE)
-            display.text(f16x8,str(cur_item["time"])+" s",floor((240-len(str(cur_item["time"])+" s")*8)/2),120,WHITE)
+            display.text(f16x8,str(floor(cur_item["time"]/1000,3))+" s",floor((240-len(str(cur_item["time"])+" s")*8)/2),120,WHITE)
 
 def _page_storage_action():
     global executables
@@ -644,7 +649,7 @@ def _page_storage_callback(option):
                     seconds_thread_stop = True
                     
                     
-                    mcp_write("1"*8+"0"*8)
+                    mcp_write(0,255)
                     stopped = True
                     display.fill_rect(0,100,240,50,0)
                     display.text(f32x16,"    Critical   ",0,36,0,RED)
@@ -1060,7 +1065,7 @@ def _system_initialize_():
     
     tft.init()
     tft.fill(0)
-    mcp_write("0"*8+"1"*8)
+    mcp_write(0,255)
     stat.off()
     internal.off()
     gui.set_pages(page_table)
@@ -1189,7 +1194,7 @@ def _system_awake_(pin):
     global tft
     
     tft.on()
-    mcp_write("0"*8+"1"*8)
+    mcp_write(0,255)
     if menu:
         menu.init()
         menu.listen()
@@ -1215,7 +1220,7 @@ def _system_sleep_():
     br.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,handler=_system_awake_)
     ok.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,handler=_system_awake_)
     stat.on()
-    mcp_write("0"*8+"1"*8)
+    mcp_write(0,255)
     buzzer.set_value(False)
 
 def _system_shutdown_():
@@ -1234,7 +1239,7 @@ def _system_shutdown_():
     tl.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,handler=_system_awake_)
     br.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,handler=_system_awake_)
     ok.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,handler=_system_awake_)
-    mcp_write("0"*8+"1"*8)
+    mcp_write(0,255)
     stat.off()
     if config["ble"]["enabled"]:
             ble.disconnect()
@@ -1254,7 +1259,7 @@ def _system_reset_():
     tl.irq(None)
     br.irq(None)
     ok.irq(None)
-    mcp_write("0"*8+"1"*8)
+    mcp_write(0,255)
     internal.off()
     ble.disconnect()
     stat.off()
@@ -1274,5 +1279,6 @@ def _system_():
     gui.show()
     
 _system_()
+
 
 
